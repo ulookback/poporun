@@ -10,7 +10,7 @@ export const GRAVITY = 1400;
 
 export const OBSTACLE_SPEED_INITIAL = 300;
 export const OBSTACLE_SPEED_INCREMENT = 15; // added per score milestone
-export const OBSTACLE_SPEED_MILESTONE = 5;  // every N score points
+export const OBSTACLE_SPEED_MILESTONE = 10;  // every N score points
 
 export const SPAWN_DELAY_MIN = 1100; // ms
 export const SPAWN_DELAY_MAX = 2400; // ms

@@ -3,9 +3,9 @@ import { GAME_WIDTH, GROUND_Y, COLORS } from '../config/gameConfig.js';
 
 // Obstacle types with varying heights/widths for visual variety
 const OBSTACLE_VARIANTS = [
-  { w: 24, h: 48, label: 'tall_fence' },
-  { w: 40, h: 32, label: 'wide_fence' },
-  { w: 28, h: 56, label: 'spike_fence' },
+  { w: 30, h: 65, label: 'tall_fence' },
+  { w: 50, h: 35, label: 'wide_fence' },
+  { w: 28, h: 60, label: 'spike_fence' },
 ];
 
 export class Obstacle {
