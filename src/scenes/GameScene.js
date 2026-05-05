@@ -1,6 +1,6 @@
 // src/scenes/GameScene.js
 import {
-  GAME_WIDTH, GAME_HEIGHT, GROUND_Y,
+  GAME_WIDTH, GAME_HEIGHT, GROUND_Y, CEILING_Y,
   GRAVITY, OBSTACLE_SPEED_INITIAL, OBSTACLE_SPEED_INCREMENT, OBSTACLE_SPEED_MILESTONE,
   SPAWN_DELAY_MIN, SPAWN_DELAY_MAX, COLORS,
 } from '../config/gameConfig.js';
@@ -18,9 +18,11 @@ export class GameScene extends Phaser.Scene {
     this.speed      = OBSTACLE_SPEED_INITIAL;
     this.obstacles  = [];
     this.spawnTimer = null;
+    this._fireTime  = 0;
 
     this._drawBackground();
     this._drawGround();
+    this._drawCeiling();
     this._createPlayer();
     this._setupColliders();
     this._setupScore();
@@ -31,43 +33,40 @@ export class GameScene extends Phaser.Scene {
   // ─── Background ──────────────────────────────────────────────────────────
 
   _drawBackground() {
-    // Sky
+    // Void sky
     this.add.rectangle(GAME_WIDTH/2, GAME_HEIGHT/2, GAME_WIDTH, GAME_HEIGHT, COLORS.sky).setDepth(0);
 
-    // Moon
-    this.add.circle(680, 40, 22, COLORS.moon).setDepth(1);
-    this.add.circle(672, 36, 18, COLORS.sky).setDepth(2);
-
-    // Stars
-    for (let i = 0; i < 40; i++) {
-      const x = Phaser.Math.Between(0, GAME_WIDTH);
-      const y = Phaser.Math.Between(0, GROUND_Y - 80);
-      const r = Math.random() < 0.2 ? 1.5 : 1;
-      this.add.circle(x, y, r, 0xffffff, 0.6 + Math.random() * 0.4).setDepth(1);
-    }
-
-    // Building layers — use pre-baked textures from BootScene (no pop-in)
-    // Each layer is two tiles wide (2×GAME_WIDTH) positioned side by side for seamless loop
-    this._buildingLayers = [
-      this._makeBuildingLayer('buildings_far',  0.12),
-      this._makeBuildingLayer('buildings_near', 0.25),
+    // Pre-baked cave layers — two tiles each for seamless scroll
+    this._bgLayers = [
+      this._makeBgLayer('cave_far',  0.08),
+      this._makeBgLayer('cave_near', 0.20),
     ];
+
+    // Animated lava glow emitters (simple pulsing circles, no particle system needed)
+    this._lavaGlows = [];
+    for (let i = 0; i < 5; i++) {
+      const glow = this.add.circle(
+        100 + i * 160 + Phaser.Math.Between(-30, 30),
+        GROUND_Y + 8,
+        Phaser.Math.Between(12, 22),
+        COLORS.lavaDark, 0.5
+      ).setDepth(3);
+      this._lavaGlows.push({ obj: glow, baseX: glow.x, phase: i * 1.2 });
+    }
   }
 
-  _makeBuildingLayer(textureKey, scrollDepth) {
-    // Two tiled images side-by-side covering 2× the screen width
+  _makeBgLayer(key, depth) {
     const texW = GAME_WIDTH * 2;
-    const img0 = this.add.image(0,       GROUND_Y, textureKey).setOrigin(0, 1).setDepth(2);
-    const img1 = this.add.image(texW,    GROUND_Y, textureKey).setOrigin(0, 1).setDepth(2);
-    return { img0, img1, texW, scrollDepth };
+    const img0 = this.add.image(0,    0, key).setOrigin(0, 0).setDepth(1);
+    const img1 = this.add.image(texW, 0, key).setOrigin(0, 0).setDepth(1);
+    return { img0, img1, texW, depth };
   }
 
-  _scrollBuildings() {
-    this._buildingLayers.forEach(({ img0, img1, texW, scrollDepth }) => {
-      const dx = this.speed * scrollDepth * (1/60);
-      img0.x -= dx;
-      img1.x -= dx;
-      // When the first tile scrolls fully off-screen, leap-frog it behind the second
+  _scrollBackground(delta) {
+    this._bgLayers.forEach(({ img0, img1, texW, depth }) => {
+      const dx = this.speed * depth * (delta / 1000);
+      img0.x -= dx * 18;
+      img1.x -= dx * 18;
       if (img0.x + texW <= 0) img0.x = img1.x + texW;
       if (img1.x + texW <= 0) img1.x = img0.x + texW;
     });
@@ -76,24 +75,48 @@ export class GameScene extends Phaser.Scene {
   // ─── Ground ──────────────────────────────────────────────────────────────
 
   _drawGround() {
-    this.add.rectangle(
-      GAME_WIDTH/2, GROUND_Y + (GAME_HEIGHT - GROUND_Y)/2,
-      GAME_WIDTH, GAME_HEIGHT - GROUND_Y, COLORS.ground
-    ).setDepth(3);
-    this.add.rectangle(GAME_WIDTH/2, GROUND_Y, GAME_WIDTH, 3, COLORS.groundLine).setDepth(4);
+    // Rock floor
+    this.add.rectangle(GAME_WIDTH/2, GROUND_Y + (GAME_HEIGHT - GROUND_Y)/2,
+      GAME_WIDTH, GAME_HEIGHT - GROUND_Y, COLORS.ground).setDepth(3);
 
-    this.roadMarkings = [];
-    for (let i = 0; i < 6; i++) {
-      this.roadMarkings.push(
-        this.add.rectangle(80 + i*140, GROUND_Y+12, 60, 3, 0x1a3a5c, 0.5).setDepth(4)
-      );
+    // Glowing lava crack at ground level
+    this.add.rectangle(GAME_WIDTH/2, GROUND_Y, GAME_WIDTH, 3, COLORS.groundLine).setDepth(4);
+    this.add.rectangle(GAME_WIDTH/2, GROUND_Y + 1, GAME_WIDTH, 1, COLORS.fireHi, 0.4).setDepth(4);
+
+    // Scrolling lava cracks on the floor
+    this._lavaCracks = [];
+    for (let i = 0; i < 5; i++) {
+      const crack = this.add.rectangle(
+        80 + i * 160, GROUND_Y + 10, Phaser.Math.Between(20, 50), 2, COLORS.lavaMid, 0.6
+      ).setDepth(4);
+      this._lavaCracks.push(crack);
     }
   }
 
-  _scrollRoad() {
-    this.roadMarkings.forEach(m => {
-      m.x -= this.speed * (1/60);
-      if (m.x < -60) m.x += 840;
+  _scrollGround() {
+    this._lavaCracks.forEach(c => {
+      c.x -= this.speed * (1/60);
+      if (c.x < -60) c.x += GAME_WIDTH + 100;
+    });
+  }
+
+  // ─── Ceiling ─────────────────────────────────────────────────────────────
+
+  _drawCeiling() {
+    // Solid rock ceiling slab
+    this.add.rectangle(GAME_WIDTH/2, CEILING_Y/2, GAME_WIDTH, CEILING_Y, COLORS.caveCeiling).setDepth(4);
+    // Glowing underside of ceiling
+    this.add.rectangle(GAME_WIDTH/2, CEILING_Y, GAME_WIDTH, 2, COLORS.lavaDark, 0.7).setDepth(4);
+  }
+
+  // ─── Animated lava glow ──────────────────────────────────────────────────
+
+  _updateLavaGlow(time) {
+    this._lavaGlows.forEach(g => {
+      const pulse = Math.sin(time / 600 + g.phase) * 0.2 + 0.4;
+      g.obj.setAlpha(pulse);
+      g.obj.x = g.baseX - ((time * this.speed * 0.0001) % GAME_WIDTH);
+      if (g.obj.x < -40) g.obj.x += GAME_WIDTH + 80;
     });
   }
 
@@ -108,7 +131,7 @@ export class GameScene extends Phaser.Scene {
 
   _setupColliders() {
     this.groundBody = this.physics.add
-      .staticImage(GAME_WIDTH/2, GROUND_Y+10, '__DEFAULT')
+      .staticImage(GAME_WIDTH/2, GROUND_Y + 10, '__DEFAULT')
       .setSize(GAME_WIDTH, 20).setVisible(false);
     this.physics.add.collider(this.player.getSprite(), this.groundBody);
   }
@@ -116,22 +139,23 @@ export class GameScene extends Phaser.Scene {
   // ─── Score ───────────────────────────────────────────────────────────────
 
   _setupScore() {
-    this.scoreText = this.add.text(GAME_WIDTH - 16, 14, 'SCORE  0', {
-      fontFamily: 'Courier New', fontSize: '15px', color: '#00ff88',
-      stroke: '#001a0d', strokeThickness: 3,
+    this.scoreText = this.add.text(GAME_WIDTH - 16, 14, 'TIME  0s', {
+      fontFamily: 'Courier New', fontSize: '15px', color: '#ff6600',
+      stroke: '#1a0000', strokeThickness: 3,
     }).setOrigin(1, 0).setDepth(20);
 
     this.speedText = this.add.text(16, 14, '', {
-      fontFamily: 'Courier New', fontSize: '11px', color: '#336655',
+      fontFamily: 'Courier New', fontSize: '11px', color: '#882200',
     }).setOrigin(0, 0).setDepth(20);
   }
 
   _updateScore(delta) {
+    // 1 point = 1 second survived
     this.score += delta / 1000;
-    const rounded = Math.floor(this.score);
-    this.scoreText.setText(`SCORE  ${rounded}`);
+    const seconds = Math.floor(this.score);
+    this.scoreText.setText(`TIME  ${seconds}s`);
 
-    const milestone     = Math.floor(rounded / OBSTACLE_SPEED_MILESTONE);
+    const milestone     = Math.floor(seconds / OBSTACLE_SPEED_MILESTONE);
     const expectedSpeed = OBSTACLE_SPEED_INITIAL + milestone * OBSTACLE_SPEED_INCREMENT;
     if (expectedSpeed > this.speed) {
       this.speed = expectedSpeed;
@@ -182,7 +206,7 @@ export class GameScene extends Phaser.Scene {
     if (this.isGameOver) return;
     this.isGameOver = true;
     this.player.die();
-    this.cameras.main.flash(300, 255, 60, 60);
+    this.cameras.main.flash(400, 255, 40, 0);  // red flash for hell
     if (this.spawnTimer) this.spawnTimer.remove();
     this.obstacles.forEach(o => o.sprite.setVelocityX(0));
     this.time.delayedCall(900, () => {
@@ -197,7 +221,8 @@ export class GameScene extends Phaser.Scene {
     this.player.update(delta);
     this._updateScore(delta);
     this._cleanupObstacles();
-    this._scrollRoad();
-    this._scrollBuildings();
+    this._scrollGround();
+    this._scrollBackground(delta);
+    this._updateLavaGlow(time);
   }
 }
