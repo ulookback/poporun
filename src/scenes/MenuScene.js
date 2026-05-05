@@ -65,7 +65,7 @@ export class MenuScene extends Phaser.Scene {
       fontFamily: 'Courier New', fontSize: '20px', color: '#ff6600',
     }).setOrigin(0.5).setDepth(11);
 
-    this.add.text(GAME_WIDTH/2, 248, 'SPACE  →  Start  |  SPACE / TAP  →  Jump', {
+    this.add.text(GAME_WIDTH/2, 248, 'SPACE / TAP  →  Jump', {
       fontFamily: 'Courier New', fontSize: '11px', color: '#551100',
     }).setOrigin(0.5).setDepth(10);
 
