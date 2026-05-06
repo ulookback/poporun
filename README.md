@@ -1,6 +1,6 @@
 # 🐱 Popo Run
 
-A minimal endless runner browser game featuring **Popo**, a black demon cat with glowing green eyes, dashing through hell.
+A minimal endless runner browser game featuring **Popo**, a black demon cat with glowing green eyes, dashing through the streets of an eternal night.
 
 ---
 
@@ -148,3 +148,9 @@ The codebase is designed to be easily extensible:
 | Double jump | `Player.js` → set `this.maxJumps = 2` |
 
 ---
+
+## 🐱 About Popo
+
+Popo is a black demon cat who runs upright through endless city streets at night. The green-eyed feline never stops — only you can save them from the fences.
+
+*Good luck. They believe in you.*
